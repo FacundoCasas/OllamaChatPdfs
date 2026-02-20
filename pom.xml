@@ -62,7 +62,7 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Lectura de Pdfs -->
+        <!-- Reading PDFs -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
