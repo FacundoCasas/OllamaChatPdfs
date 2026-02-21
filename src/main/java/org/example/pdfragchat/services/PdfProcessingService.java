@@ -1,7 +1,9 @@
 package org.example.pdfragchat.services;
 
+import org.example.pdfragchat.dto.DocumentChunk;
 import org.example.pdfragchat.exceptions.FileNameInvalidException;
 import org.example.pdfragchat.exceptions.PdfAlreadyExistsException;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,6 +15,8 @@ public class PdfProcessingService {
     private final PdfTextExtractor pdfTextExtractor;
     private final TextChunker textChunker;
     private final InMemoryStorageService storageService;
+    private final EmbeddingModel embeddingModel;
+
 
     private static final int CHUNK_SIZE = 500;
     private static final int OVERLAP = 50;
@@ -20,11 +24,13 @@ public class PdfProcessingService {
     public PdfProcessingService(
             PdfTextExtractor pdfTextExtractor,
             TextChunker textChunker,
-            InMemoryStorageService storageService
+            InMemoryStorageService storageService,
+            EmbeddingModel embeddingModel
     ) {
         this.pdfTextExtractor = pdfTextExtractor;
         this.textChunker = textChunker;
         this.storageService = storageService;
+        this.embeddingModel = embeddingModel;
     }
 
     public String processAndStore(MultipartFile file) {
@@ -36,8 +42,14 @@ public class PdfProcessingService {
 
         String text = pdfTextExtractor.extractText(file);
         List<String> chunks = textChunker.chunkText(text, CHUNK_SIZE, OVERLAP);
+        List<DocumentChunk> documentChunks = chunks.stream()
+                .map(chunk -> {
+                    float[] embedding = embeddingModel.embed(chunk);
+                    return new DocumentChunk(chunk, embedding);
+                })
+                .toList();
 
-        storageService.save(id, chunks);
+        storageService.save(id, documentChunks);
 
         return id;
     }
@@ -59,17 +71,12 @@ public class PdfProcessingService {
         }
     }
 
-    public List<String> getChunks(String filename) {
+    public List<DocumentChunk> getDocumentChunks(String filename) {
         return storageService.get(filename);
     }
 
-    public boolean pdfAlreadyExist(MultipartFile file){
+    private boolean pdfAlreadyExist(MultipartFile file){
         return storageService.alreadyExist(generateIdFromFilename(file.getOriginalFilename()));
-    }
-
-    public boolean fileNameIsInvalid(MultipartFile file){
-        String fileName = file.getOriginalFilename();
-        return fileName == null || fileName.isBlank();
     }
 
     private String generateIdFromFilename(String filename) {
